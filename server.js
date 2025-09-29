@@ -144,38 +144,5 @@ app.post('/call', async (req, res) => {
     }
 });
 
-/**
- * Status Callback (Twilio → /status)
- */
-app.post('/status', async (req, res) => {
-    const { CallStatus, From, To, CallSid } = req.body;
-    console.log(`📞 Status update for ${CallSid}: ${CallStatus}`);
-
-    try {
-        // Update case status in Salesforce
-        const phone = From || To;
-
-        if (CallStatus === 'completed') {
-            const existingCases = await conn
-                .sobject('Case')
-                .find({ SuppliedPhone: phone })
-                .limit(1)
-                .execute();
-
-            if (existingCases.length > 0) {
-                await conn.sobject('Case').update({
-                    Id: existingCases[0].Id,
-                    Status: 'Closed'
-                });
-                console.log(`✅ Closed Salesforce Case for ${phone}`);
-            }
-        }
-    } catch (err) {
-        console.error('❌ Error updating Salesforce case:', err);
-    }
-
-    res.sendStatus(200);
-});
-
 const port = process.env.PORT || 5000;
 app.listen(port, () => console.log(`🚀 Middleware with IVR running on port ${port}`));
