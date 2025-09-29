@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather numDigits="1" action="/gather" method="POST">
+        <Say voice="alice" language="en-US">Welcome to the automated system. Press 1 for Sales. Press 2 for Support. Or press any other key to hear this menu again.</Say>
+    </Gather>
+    <Redirect>/voice</Redirect>
+</Response>
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>You selected Sales. A case has been created. Please wait while we connect you to Sales.</Say>
+    <Dial>+923143671703</Dial>
+</Response>
+
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>You selected Support. A case has been created. Please wait while we connect you to Support.</Say>
+    <Dial>+923143671703</Dial>
+</Response>

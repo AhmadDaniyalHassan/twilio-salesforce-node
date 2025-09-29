@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather numDigits="1" action="/gather" method="POST">
-        <Say voice="alice" language="en-US">Welcome to the automated system. Press 1 for Sales.
-            Press 2 for Support. Or press any other key to hear this menu again.</Say>
-    </Gather>
-    <Redirect>/voice</Redirect>
-</Response>
