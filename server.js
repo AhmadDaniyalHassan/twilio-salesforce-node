@@ -1,21 +1,22 @@
-// imports
+//imports
 import 'dotenv/config';
 import express from 'express';
 import twilio from 'twilio';
 import jsforce from 'jsforce';
 
+//express server setup
 const app = express();
-app.use(express.urlencoded({ extended: true })); // for Twilio form data
-app.use(express.json()); // for JSON data
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// Twilio setup
+//Twilio setup
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
-// Salesforce setup
+//Salesforce setup
 const conn = new jsforce.Connection({ loginUrl: process.env.SF_LOGIN_URL });
 
-// Auto-login on server start
+//Auto-login on server start to salesforce
 async function salesforceLogin() {
     try {
         await conn.login(
@@ -29,7 +30,7 @@ async function salesforceLogin() {
 }
 await salesforceLogin();
 
-// Create Salesforce Case (avoid duplicates)
+//Create Salesforce Case and avoid duplicates
 async function createCaseIfNotExists(phone, direction, status, subjectExtra = '') {
     try {
         const existingCases = await conn
@@ -58,16 +59,14 @@ async function createCaseIfNotExists(phone, direction, status, subjectExtra = ''
 }
 
 
-//  * Inbound Call IVR (Twilio → /voice)
-
+//Inbound Call IVR handler
 app.post('/voice', async (req, res) => {
     const twiml = new VoiceResponse();
     const caller = req.body.From;
 
-    // Play IVR menu
     const gather = twiml.gather({
         numDigits: 1,
-        action: '/gather', // when digit is pressed, Twilio POSTs here
+        action: '/gather',
         method: 'POST'
     });
 
@@ -79,10 +78,8 @@ app.post('/voice', async (req, res) => {
         'Or press any other key to hear this menu again.'
     );
 
-    // If no input, repeat menu
     twiml.redirect('/voice');
 
-    // Log inbound call case (general)
     await createCaseIfNotExists(caller, 'inbound', 'New');
 
     res.type('text/xml');
@@ -90,24 +87,19 @@ app.post('/voice', async (req, res) => {
 });
 
 
-//  IVR Gather Handler
-
+//IVR Gather Handler
 app.post('/gather', async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body.Digits;
     const caller = req.body.From;
 
     if (digit === '1') {
-        // Create Salesforce case tagged as Sales
         await createCaseIfNotExists(caller, 'inbound', 'New', '(Sales)');
         twiml.say('You selected Sales. A case has been created. Please wait while we connect you to Sales.');
-        // Example: forward to sales team number
         twiml.dial(process.env.SALES_PHONE || process.env.MY_PHONE_NUMBER);
     } else if (digit === '2') {
-        // Create Salesforce case tagged as Support
         await createCaseIfNotExists(caller, 'inbound', 'New', '(Support)');
         twiml.say('You selected Support. A case has been created. Please wait while we connect you to Support.');
-        // Example: forward to support team number
         twiml.dial(process.env.SUPPORT_PHONE || process.env.MY_PHONE_NUMBER);
     } else {
         twiml.say('Invalid choice. Returning to the main menu.');
@@ -118,19 +110,15 @@ app.post('/gather', async (req, res) => {
     res.send(twiml.toString());
 });
 
-
-//   Outbound Call (POST /call)
-//   Body: { "to": "+92XXXXXXXXXX" }
-
+// Outbound Call Endpoint
 app.post('/call', async (req, res) => {
     const to = req.body.to || process.env.MY_PHONE_NUMBER;
 
     try {
-        // Create Salesforce case before dialing
         await createCaseIfNotExists(to, 'outbound', 'In Progress');
 
         const call = await client.calls.create({
-            url: `${process.env.BASE_URL}/voice`, // Twilio will hit this endpoint when answered
+            url: `${process.env.BASE_URL}/voice`,
             to,
             from: process.env.TWILIO_PHONE_NUMBER,
             statusCallback: `${process.env.BASE_URL}/status`,
@@ -145,12 +133,12 @@ app.post('/call', async (req, res) => {
     }
 });
 
+// Call Status Callback Handler
 app.post('/status', async (req, res) => {
     const { CallStatus, From, To, CallSid } = req.body;
     console.log(`Status update for ${CallSid}: ${CallStatus}`);
 
     try {
-        // Update case status in Salesforce
         const phone = From || To;
 
         if (CallStatus === 'completed') {
@@ -176,4 +164,4 @@ app.post('/status', async (req, res) => {
 });
 
 const port = process.env.PORT || 5000;
-app.listen(port, () => console.log(`Middleware with IVR running on port ${port}`));
+app.listen(port, () => console.log(`Middleware running on port ${port}`));
