@@ -1,11 +1,12 @@
+// imports
 import 'dotenv/config';
 import express from 'express';
 import twilio from 'twilio';
 import jsforce from 'jsforce';
 
 const app = express();
-app.use(express.urlencoded({ extended: true })); // ✅ for Twilio form data
-app.use(express.json()); // ✅ for JSON data
+app.use(express.urlencoded({ extended: true })); // for Twilio form data
+app.use(express.json()); // for JSON data
 
 // Twilio setup
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
@@ -21,14 +22,14 @@ async function salesforceLogin() {
             process.env.SF_USERNAME,
             process.env.SF_PASSWORD + process.env.SF_TOKEN
         );
-        console.log('✅ Salesforce login successful');
+        console.log('Salesforce login successful');
     } catch (err) {
-        console.error('❌ Salesforce login failed:', err);
+        console.error('Salesforce login failed:', err);
     }
 }
 await salesforceLogin();
 
-// Utility: Create Salesforce Case (avoid duplicates)
+// Create Salesforce Case (avoid duplicates)
 async function createCaseIfNotExists(phone, direction, status, subjectExtra = '') {
     try {
         const existingCases = await conn
@@ -45,20 +46,20 @@ async function createCaseIfNotExists(phone, direction, status, subjectExtra = ''
                 SuppliedPhone: phone,
                 Description: `Auto-logged ${direction} call via Twilio middleware ${subjectExtra}`
             });
-            console.log(`📂 Created Salesforce Case for ${phone}:`, newCase.id);
+            console.log(`Created Salesforce Case for ${phone}:`, newCase.id);
             return newCase;
         } else {
-            console.log(`ℹ️ Case already exists for ${phone}`);
+            console.log(`Case already exists for ${phone}`);
             return existingCases[0];
         }
     } catch (err) {
-        console.error('❌ Salesforce error while creating case:', err);
+        console.error('Salesforce error while creating case:', err);
     }
 }
 
-/**
- * Inbound Call IVR (Twilio → /voice)
- */
+
+//  * Inbound Call IVR (Twilio → /voice)
+
 app.post('/voice', async (req, res) => {
     const twiml = new VoiceResponse();
     const caller = req.body.From;
@@ -88,9 +89,9 @@ app.post('/voice', async (req, res) => {
     res.send(twiml.toString());
 });
 
-/**
- * IVR Gather Handler
- */
+
+//  IVR Gather Handler
+
 app.post('/gather', async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body.Digits;
@@ -117,10 +118,10 @@ app.post('/gather', async (req, res) => {
     res.send(twiml.toString());
 });
 
-/**
- * Outbound Call (POST /call)
- * Body: { "to": "+92XXXXXXXXXX" }
- */
+
+//   Outbound Call (POST /call)
+//   Body: { "to": "+92XXXXXXXXXX" }
+
 app.post('/call', async (req, res) => {
     const to = req.body.to || process.env.MY_PHONE_NUMBER;
 
@@ -139,10 +140,40 @@ app.post('/call', async (req, res) => {
 
         return res.json({ success: true, sid: call.sid });
     } catch (err) {
-        console.error('❌ Twilio call error:', err);
+        console.error('Twilio call error:', err);
         return res.status(500).json({ success: false, message: err.message });
     }
 });
 
+app.post('/status', async (req, res) => {
+    const { CallStatus, From, To, CallSid } = req.body;
+    console.log(`Status update for ${CallSid}: ${CallStatus}`);
+
+    try {
+        // Update case status in Salesforce
+        const phone = From || To;
+
+        if (CallStatus === 'completed') {
+            const existingCases = await conn
+                .sobject('Case')
+                .find({ SuppliedPhone: phone })
+                .limit(1)
+                .execute();
+
+            if (existingCases.length > 0) {
+                await conn.sobject('Case').update({
+                    Id: existingCases[0].Id,
+                    Status: 'Closed'
+                });
+                console.log(`Closed Salesforce Case for ${phone}`);
+            }
+        }
+    } catch (err) {
+        console.error('Error updating Salesforce case:', err);
+    }
+
+    res.sendStatus(200);
+});
+
 const port = process.env.PORT || 5000;
-app.listen(port, () => console.log(`🚀 Middleware with IVR running on port ${port}`));
+app.listen(port, () => console.log(`Middleware with IVR running on port ${port}`));
